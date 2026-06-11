@@ -469,6 +469,27 @@ fn test_e2e_scenario_url_only_matching() {
         "test.example.com should NOT match Another Site");
 }
 
+#[test]
+fn test_public_suffix_sibling_tenants_do_not_match() {
+    let credentials = vec![
+        create_test_credential("Victim GitHub Pages", "https://victim.github.io/login", "user@victim"),
+    ];
+
+    let sibling_matches = filter(credentials.clone(), "https://attacker.github.io/login", "");
+    assert_eq!(
+        sibling_matches.len(),
+        0,
+        "sibling tenants on a private public suffix must not share credentials"
+    );
+
+    let same_tenant_subdomain_matches = filter(credentials, "https://login.victim.github.io/login", "");
+    assert_eq!(same_tenant_subdomain_matches.len(), 1);
+    assert_eq!(
+        same_tenant_subdomain_matches[0].item_name.as_deref(),
+        Some("Victim GitHub Pages")
+    );
+}
+
 /// [#24] - Multi-URL support: credentials with multiple URLs should match any of them
 #[test]
 fn test_multi_url_matching() {

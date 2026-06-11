@@ -233,6 +233,21 @@ pub fn extract_domain(url: &str) -> String {
 /// E.g., "sub.example.com.au" -> "example.com.au"
 /// E.g., "sub.example.co.uk" -> "example.co.uk"
 pub fn extract_root_domain(domain: &str) -> String {
+    let normalized = domain.trim().trim_end_matches('.').to_lowercase();
+    if normalized.is_empty() {
+        return String::new();
+    }
+
+    if let Some(registrable_domain) = psl::domain_str(&normalized) {
+        return registrable_domain.to_string();
+    }
+
+    extract_root_domain_fallback(&normalized)
+}
+
+/// Fallback root-domain extraction for local/internal hostnames that are not
+/// represented in the Public Suffix List.
+fn extract_root_domain_fallback(domain: &str) -> String {
     let parts: Vec<&str> = domain.split('.').collect();
     if parts.len() < 2 {
         return domain.to_string();
@@ -430,6 +445,18 @@ mod tests {
         assert_eq!(extract_root_domain("sub.example.co.uk"), "example.co.uk");
         assert_eq!(extract_root_domain("example.co.uk"), "example.co.uk");
         assert_eq!(extract_root_domain("sub.example.com.au"), "example.com.au");
+        assert_eq!(extract_root_domain("LOCALHOST"), "localhost");
+    }
+
+    #[test]
+    fn test_extract_root_domain_uses_private_public_suffixes() {
+        assert_eq!(extract_root_domain("victim.github.io"), "victim.github.io");
+        assert_eq!(extract_root_domain("login.victim.github.io"), "victim.github.io");
+        assert_eq!(extract_root_domain("attacker.github.io"), "attacker.github.io");
+        assert_ne!(
+            extract_root_domain("victim.github.io"),
+            extract_root_domain("attacker.github.io")
+        );
     }
 
     #[test]
@@ -454,5 +481,9 @@ mod tests {
         assert!(!domains_match("example.com", "another-example.com"));
         assert!(!domains_match("myexample.com", "example.com"));
         assert!(!domains_match("example.com.evil.com", "example.com"));
+
+        // Public Suffix List private entries prevent sibling tenant matching.
+        assert!(!domains_match("victim.github.io", "attacker.github.io"));
+        assert!(domains_match("login.victim.github.io", "victim.github.io"));
     }
 }
